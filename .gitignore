@@ -30,3 +30,5 @@
 *.exe
 *.out
 *.app
+.vs/
+OpenGL_4_Application_VS2015/

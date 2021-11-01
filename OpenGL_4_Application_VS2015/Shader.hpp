@@ -9,11 +9,9 @@
 #ifndef Shader_hpp
 #define Shader_hpp
 
-#define GLEW_STATIC
-
 #include <stdio.h>
 #include <iostream>
-#include "GLEW\glew.h"
+#include "GLEW/glew.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>

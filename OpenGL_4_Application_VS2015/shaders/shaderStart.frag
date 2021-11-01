@@ -1,8 +1,12 @@
 #version 400
 
-out vec4 frag_colour;
+in vec3 colour;
+in vec2 passTexture;
+
+out vec4 fragmentColour;
+
+uniform sampler2D diffuseTexture;
 
 void main() {
-    vec3 colour = vec3(0.86, 0.74, 0.0);
-	frag_colour = vec4(colour, 1.0);
+ fragmentColour = texture(diffuseTexture, passTexture);
 }

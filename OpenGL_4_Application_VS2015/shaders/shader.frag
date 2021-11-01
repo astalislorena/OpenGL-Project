@@ -1,7 +1,10 @@
 #version 400
-in vec3 colour;
-out vec4 frag_colour;
+
+out vec4 fragmentColour;
+
+uniform vec3 uniformColour;
+
 void main() {
-frag_colour = vec4 (colour, 1.0);
+	fragmentColour = vec4(uniformColour, 1.0);
 }
 
