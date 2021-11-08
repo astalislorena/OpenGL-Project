@@ -1,12 +1,13 @@
-#version 400
+//pass-through fragment shader for OpenGL lighting
+#version 410 core
 
-in vec3 colour;
-in vec2 passTexture;
+uniform vec3 baseColor;
 
-out vec4 fragmentColour;
+in vec3 color;
 
-uniform sampler2D diffuseTexture;
+out vec4 fColor;
 
-void main() {
- fragmentColour = texture(diffuseTexture, passTexture);
+void main()
+{	
+	fColor = vec4(color, 1.0f);
 }

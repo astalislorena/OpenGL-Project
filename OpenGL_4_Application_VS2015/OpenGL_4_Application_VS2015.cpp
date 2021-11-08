@@ -12,39 +12,75 @@
 #include "GLFW/glfw3.h"
 #include <string>
 
-#include "glm/glm.hpp"//core glm functionality
-#include "glm/gtc/matrix_transform.hpp"//glm extension for generating common transformation matrices
-#include "glm/gtc/type_ptr.hpp"//glm extension for accessing the internal data structure of glm types
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/matrix_inverse.hpp"
+#include "glm/gtc/type_ptr.hpp"
 
 #include "Shader.hpp"
-#include "Camera.hpp"
-#define TINYOBJLOADER_IMPLEMENTATION
-
 #include "Model3D.hpp"
-#include "Mesh.hpp"
+#include "Camera.hpp"
 
-int glWindowWidth = 640;
-int glWindowHeight = 480;
+#include <iostream>
+
+int glWindowWidth = 800;
+int glWindowHeight = 600;
 int retina_width, retina_height;
 GLFWwindow* glWindow = NULL;
 
+gps::Model3D teapot;
+
 glm::mat4 model;
-GLint modelLoc;
-
+GLuint modelLoc;
 glm::mat4 view;
-GLint viewLoc;
+GLuint viewLoc;
+glm::mat4 projection;
+GLuint projectionLoc;
+glm::mat3 normalMatrix;
+GLuint normalMatrixLoc;
 
-glm::vec3 camPosition = glm::vec3(0.0f, 5.0f, 15.0f);
-glm::vec3 camTarget = glm::vec3(0.0f, 2.0f, -10.0f);
+glm::vec3 lightDir;
+GLuint lightDirLoc;
+glm::vec3 lightColor;
+GLuint lightColorLoc;
+glm::vec3 baseColor(1.0f, 0.55f, 0.0f); //orange
+GLuint baseColorLoc;
+glm::vec3 viewPos;
+GLuint viewPosLoc;
 
-//gps::Camera myCamera(glm::vec3(0.0f, 5.0f, 15.0f), glm::vec3(0.0f, 2.0f, -10.0f));
-float cameraSpeed = 0.01f;
+gps::Camera myCamera(
+	glm::vec3(0.0f, 0.0f, 2.0f),
+	glm::vec3(0.0f, 0.0f, -10.0f),
+	glm::vec3(0.0f, 1.0f, 0.0f)
+);
+GLfloat cameraSpeed = 0.01f;
 
 bool pressedKeys[1024];
-float angle = 0.0f;
+GLfloat angleY;
 
-gps::Model3D myModel;
 gps::Shader myCustomShader;
+
+GLenum glCheckError_(const char* file, int line)
+{
+	GLenum errorCode;
+	while ((errorCode = glGetError()) != GL_NO_ERROR)
+	{
+		std::string error;
+		switch (errorCode)
+		{
+		case GL_INVALID_ENUM:                  error = "INVALID_ENUM"; break;
+		case GL_INVALID_VALUE:                 error = "INVALID_VALUE"; break;
+		case GL_INVALID_OPERATION:             error = "INVALID_OPERATION"; break;
+		case GL_STACK_OVERFLOW:                error = "STACK_OVERFLOW"; break;
+		case GL_STACK_UNDERFLOW:               error = "STACK_UNDERFLOW"; break;
+		case GL_OUT_OF_MEMORY:                 error = "OUT_OF_MEMORY"; break;
+		case GL_INVALID_FRAMEBUFFER_OPERATION: error = "INVALID_FRAMEBUFFER_OPERATION"; break;
+		}
+		std::cout << error << " | " << file << " (" << line << ")" << std::endl;
+	}
+	return errorCode;
+}
+#define glCheckError() glCheckError_(__FILE__, __LINE__)
 
 void windowResizeCallback(GLFWwindow* window, int width, int height)
 {
@@ -73,39 +109,56 @@ void mouseCallback(GLFWwindow* window, double xpos, double ypos)
 
 void processMovement()
 {
-
 	if (pressedKeys[GLFW_KEY_Q]) {
-		angle += 0.0002;
+		angleY -= 1.0f;
+		model = glm::rotate(glm::mat4(1.0f), glm::radians(angleY), glm::vec3(0.0f, 1.0f, 0.0f));
+		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
 	}
 
 	if (pressedKeys[GLFW_KEY_E]) {
-		angle -= 0.0002;
+		angleY += 1.0f;
+		model = glm::rotate(glm::mat4(1.0f), glm::radians(angleY), glm::vec3(0.0f, 1.0f, 0.0f));
+		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
 	}
 
 	if (pressedKeys[GLFW_KEY_W]) {
-		//myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
-
+		myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
+		view = myCamera.getViewMatrix();
+		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
+		glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
 	}
 
 	if (pressedKeys[GLFW_KEY_S]) {
-		//myCamera.move(gps::MOVE_BACKWARD, cameraSpeed);
+		myCamera.move(gps::MOVE_BACKWARD, cameraSpeed);
+		view = myCamera.getViewMatrix();
+		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
+		glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
 	}
 
 	if (pressedKeys[GLFW_KEY_A]) {
-		//myCamera.move(gps::MOVE_LEFT, cameraSpeed);
+		myCamera.move(gps::MOVE_LEFT, cameraSpeed);
+		view = myCamera.getViewMatrix();
+		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
+		glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
 	}
 
 	if (pressedKeys[GLFW_KEY_D]) {
-		//myCamera.move(gps::MOVE_RIGHT, cameraSpeed);
-	}
-
-	if (pressedKeys[GLFW_KEY_UP]) {
-		camPosition.z -= 0.1;
-		camTarget.z -= 0.1;
-	}
-	if (pressedKeys[GLFW_KEY_DOWN]) {
-		camPosition.z += 0.1;
-		camTarget.z += 0.1;
+		myCamera.move(gps::MOVE_RIGHT, cameraSpeed);
+		view = myCamera.getViewMatrix();
+		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+		normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+		glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
+		glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
 	}
 }
 
@@ -116,11 +169,12 @@ bool initOpenGLWindow()
 		return false;
 	}
 
-	//for Mac OS X
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	glfwWindowHint(GLFW_SAMPLES, 4);
 
 	glWindow = glfwCreateWindow(glWindowWidth, glWindowHeight, "OpenGL Shader Example", NULL, NULL);
 	if (!glWindow) {
@@ -130,9 +184,13 @@ bool initOpenGLWindow()
 	}
 
 	glfwSetWindowSizeCallback(glWindow, windowResizeCallback);
+	glfwSetKeyCallback(glWindow, keyboardCallback);
+	glfwSetCursorPosCallback(glWindow, mouseCallback);
+	//glfwSetInputMode(glWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
 	glfwMakeContextCurrent(glWindow);
 
-	glfwWindowHint(GLFW_SAMPLES, 4);
+	glfwSwapInterval(1);
 
 	// start GLEW extension handler
 	glewExperimental = GL_TRUE;
@@ -147,191 +205,102 @@ bool initOpenGLWindow()
 	//for RETINA display
 	glfwGetFramebufferSize(glWindow, &retina_width, &retina_height);
 
-	glfwSetKeyCallback(glWindow, keyboardCallback);
-	glfwSetCursorPosCallback(glWindow, mouseCallback);
-	//glfwSetInputMode(glWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
 	return true;
 }
 
-GLuint ReadTextureFromFile(const char* file_name) {
-	int x, y, n;
-	int force_channels = 4;
-	unsigned char* image_data = stbi_load(file_name, &x, &y, &n, force_channels);
-	if (!image_data) {
-		fprintf(stderr, "ERROR: could not load %s\n", file_name);
-		return false;
-	}
-	// NPOT check
-	if ((x & (x - 1)) != 0 || (y & (y - 1)) != 0) {
-		fprintf(
-			stderr, "WARNING: texture %s is not power-of-2 dimensions\n", file_name
-		);
-	}
-
-	int width_in_bytes = x * 4;
-	unsigned char* top = NULL;
-	unsigned char* bottom = NULL;
-	unsigned char temp = 0;
-	int half_height = y / 2;
-
-	for (int row = 0; row < half_height; row++) {
-		top = image_data + row * width_in_bytes;
-		bottom = image_data + (y - row - 1) * width_in_bytes;
-		for (int col = 0; col < width_in_bytes; col++) {
-			temp = *top;
-			*top = *bottom;
-			*bottom = temp;
-			top++;
-			bottom++;
-		}
-	}
-
-	GLuint textureID;
-	glGenTextures(1, &textureID);
-	glBindTexture(GL_TEXTURE_2D, textureID);
-	glTexImage2D(
-		GL_TEXTURE_2D,
-		0,
-		GL_SRGB, //GL_SRGB,//GL_RGBA,
-		x,
-		y,
-		0,
-		GL_RGBA,
-		GL_UNSIGNED_BYTE,
-		image_data
-	);
-	glGenerateMipmap(GL_TEXTURE_2D);
-
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
-
-	return textureID;
+void initObjects()
+{
+	teapot.LoadModel("models/teapots/teapot10segU.obj");
 }
 
-GLuint verticesVBO;
-GLuint verticesEBO;
-GLuint objectVAO;
-GLint texture;
+void initUniforms()
+{
+	myCustomShader.useShaderProgram();
 
-//vertex position and UV coordinates
-GLfloat vertexData[] = {
-	// primul triunghi
-	-5.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-	5.0f,0.0f, 0.0f, 1.0f, 0.0f,
-	0.0f, 8.0f, 0.0f, 0.5f, 1.0f,
-	// al doilea triunghi
-	0.1f, 8.0f, 0.0f, 0.0f, 0.0f,
-	5.1f, 0.0f, 0.0f, 0.0f, 0.0f,
-	10.1f, 8.0f, 0.0f, 0.0f, 0.0f
-};
+	model = glm::mat4(1.0f);
+	modelLoc = glGetUniformLocation(myCustomShader.shaderProgram, "model");
+	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
-GLuint vertexIndices[] = {
-	0,1,2,
-	3,4,5
-};
+	view = myCamera.getViewMatrix();
+	viewLoc = glGetUniformLocation(myCustomShader.shaderProgram, "view");
+	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
 
+	normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+	normalMatrixLoc = glGetUniformLocation(myCustomShader.shaderProgram, "normalMatrix");
+	glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
+
+	projection = glm::perspective(glm::radians(45.0f), (float)retina_width / (float)retina_height, 0.1f, 30.0f);
+	projectionLoc = glGetUniformLocation(myCustomShader.shaderProgram, "projection");
+	glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+	//set the light direction
+	lightDir = glm::vec3(0.0f, 1.0f, 1.0f);
+	lightDirLoc = glGetUniformLocation(myCustomShader.shaderProgram, "lightDir");
+	glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
+
+	//set light color
+	lightColor = glm::vec3(1.0f, 1.0f, 1.0f); //white light
+	lightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "lightColor");
+	glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+
+	baseColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "baseColor");
+	glUniform3fv(baseColorLoc, 1, glm::value_ptr(baseColor));
+}
+
+void initShaders() {
+	myCustomShader.loadShader("shaders/shaderStart.vert", "shaders/shaderStart.frag");
+	myCustomShader.useShaderProgram();
+}
+
+void initOpenGLState()
+{
+	glClearColor(0.8, 0.8, 0.8, 1.0);
+	glViewport(0, 0, retina_width, retina_height);
+
+	glEnable(GL_DEPTH_TEST); // enable depth-testing	
+	glDepthFunc(GL_LESS); // depth-testing interprets a smaller value as "closer"
+
+	glEnable(GL_CULL_FACE); // cull face
+	glCullFace(GL_BACK); // cull back face
+	glFrontFace(GL_CCW); // GL_CCW for counter clock-wise
+}
 
 void renderScene()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glClearColor(0.8, 0.8, 0.8, 1.0);
-	glViewport(0, 0, retina_width, retina_height);
 
-	//initialize the model matrix
-	model = glm::mat4(1.0f);
-	modelLoc = glGetUniformLocation(myCustomShader.shaderProgram, "model");
-
-	processMovement();
-
-	myCustomShader.useShaderProgram();
-
-	//initialize the view matrix
-
-	//send matrix data to shader
-	view = glm::lookAt(camPosition, camTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-	GLint viewLoc = glGetUniformLocation(myCustomShader.shaderProgram, "view");
-	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-
-	//create rotation matrix
-	model = glm::rotate(model, angle, glm::vec3(0, 1, 0));
-	//send matrix data to vertex shader
-	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-	glActiveTexture(GL_TEXTURE0);
-	glUniform1i(glGetUniformLocation(myCustomShader.shaderProgram, "diffuseTexture"), 0);
-	glBindTexture(GL_TEXTURE_2D, texture);
-
-	glBindVertexArray(objectVAO);
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-	
+	teapot.Draw(myCustomShader);
 }
 
-void loadTriangleData() {
-	glGenVertexArrays(1, &objectVAO);
+void cleanup() {
 
-	glBindVertexArray(objectVAO);
-
-	glGenBuffers(1, &verticesVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, verticesVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertexData), vertexData, GL_STATIC_DRAW);
-
-	glGenBuffers(1, &verticesEBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, verticesEBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(vertexIndices), vertexIndices, GL_STATIC_DRAW);
-
-	//vertex position attribute
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-
-	//vertex texture
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(2);
-
-
-	glBindVertexArray(0);
+	glfwDestroyWindow(glWindow);
+	//close GL context and any other GLFW resources
+	glfwTerminate();
 }
 
 int main(int argc, const char* argv[]) {
 
-	initOpenGLWindow();
+	if (!initOpenGLWindow()) {
+		glfwTerminate();
+		return 1;
+	}
 
-	glEnable(GL_DEPTH_TEST); // enable depth-testing
-	glDepthFunc(GL_LESS); // depth-testing interprets a smaller value as "closer"
-	glEnable(GL_CULL_FACE); // cull face
-	glCullFace(GL_BACK); // cull back face
-	glFrontFace(GL_CCW); // GL_CCW for counter clock-wise
-
-	myCustomShader.loadShader("shaders/shaderStart.vert", "shaders/shaderStart.frag");
-	myCustomShader.useShaderProgram();
-
-
-	view = glm::lookAt(camPosition, camTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-	viewLoc = glGetUniformLocation(myCustomShader.shaderProgram, "view");
-	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-
-	//initialize the projection matrix
-	glm::mat4 projection = glm::perspective(45.0f, (float)glWindowWidth / (float)glWindowHeight, 0.1f, 1000.0f);
-	//send matrix data to shader
-	GLint projLoc = glGetUniformLocation(myCustomShader.shaderProgram, "projection");
-	glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-	loadTriangleData();
-
-	texture = ReadTextureFromFile("textures/hazard2.png");
+	initOpenGLState();
+	initObjects();
+	initShaders();
+	initUniforms();
 
 	while (!glfwWindowShouldClose(glWindow)) {
+		processMovement();
 		renderScene();
 
 		glfwPollEvents();
 		glfwSwapBuffers(glWindow);
 	}
 
-	//close GL context and any other GLFW resources
-	glfwTerminate();
+	cleanup();
 
 	return 0;
 }
+
