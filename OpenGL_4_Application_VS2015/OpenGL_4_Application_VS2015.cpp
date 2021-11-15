@@ -28,8 +28,6 @@ int glWindowHeight = 600;
 int retina_width, retina_height;
 GLFWwindow* glWindow = NULL;
 
-gps::Model3D teapot;
-
 glm::mat4 model;
 GLuint modelLoc;
 glm::mat4 view;
@@ -43,25 +41,20 @@ glm::vec3 lightDir;
 GLuint lightDirLoc;
 glm::vec3 lightColor;
 GLuint lightColorLoc;
-glm::vec3 baseColor(1.0f, 0.55f, 0.0f); //orange
-GLuint baseColorLoc;
-glm::vec3 viewPos;
-GLuint viewPosLoc;
 
 gps::Camera myCamera(
-	glm::vec3(0.0f, 0.0f, 2.0f),
+	glm::vec3(0.0f, 0.0f, 2.5f),
 	glm::vec3(0.0f, 0.0f, -10.0f),
-	glm::vec3(0.0f, 1.0f, 0.0f)
-);
-GLfloat cameraSpeed = 0.01f;
+	glm::vec3(0.0f, 1.0f, 0.0f));
+float cameraSpeed = 0.01f;
 
 bool pressedKeys[1024];
-GLfloat angleY;
+float angleY = 0.0f;
 
+gps::Model3D myModel;
 gps::Shader myCustomShader;
 
-GLenum glCheckError_(const char* file, int line)
-{
+GLenum glCheckError_(const char* file, int line) {
 	GLenum errorCode;
 	while ((errorCode = glGetError()) != GL_NO_ERROR)
 	{
@@ -82,14 +75,12 @@ GLenum glCheckError_(const char* file, int line)
 }
 #define glCheckError() glCheckError_(__FILE__, __LINE__)
 
-void windowResizeCallback(GLFWwindow* window, int width, int height)
-{
+void windowResizeCallback(GLFWwindow* window, int width, int height) {
 	fprintf(stdout, "window resized to width: %d , and height: %d\n", width, height);
-	//TODO
+	//TODO	
 }
 
-void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mode)
-{
+void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int mode) {
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, GL_TRUE);
 
@@ -102,8 +93,7 @@ void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
 	}
 }
 
-void mouseCallback(GLFWwindow* window, double xpos, double ypos)
-{
+void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
 
 }
 
@@ -173,7 +163,7 @@ bool initOpenGLWindow()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+	glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
 	glfwWindowHint(GLFW_SAMPLES, 4);
 
 	glWindow = glfwCreateWindow(glWindowWidth, glWindowHeight, "OpenGL Shader Example", NULL, NULL);
@@ -208,15 +198,30 @@ bool initOpenGLWindow()
 	return true;
 }
 
-void initObjects()
+void initOpenGLState()
 {
-	teapot.LoadModel("models/teapots/teapot10segU.obj");
+	glClearColor(0.3, 0.3, 0.3, 1.0);
+	glViewport(0, 0, retina_width, retina_height);
+
+	glEnable(GL_DEPTH_TEST); // enable depth-testing
+	glDepthFunc(GL_LESS); // depth-testing interprets a smaller value as "closer"
+	glEnable(GL_CULL_FACE); // cull face
+	glCullFace(GL_BACK); // cull back face
+	glFrontFace(GL_CCW); // GL_CCW for counter clock-wise
+
+	glEnable(GL_FRAMEBUFFER_SRGB);
 }
 
-void initUniforms()
-{
-	myCustomShader.useShaderProgram();
+void initObjects() {
+	myModel.LoadModel("objects/nanosuit/nanosuit.obj", "objects/nanosuit/");
+}
 
+void initShaders() {
+	myCustomShader.loadShader("shaders/shaderStart.vert", "shaders/shaderStart.frag");
+	myCustomShader.useShaderProgram();
+}
+
+void initUniforms() {
 	model = glm::mat4(1.0f);
 	modelLoc = glGetUniformLocation(myCustomShader.shaderProgram, "model");
 	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
@@ -229,11 +234,11 @@ void initUniforms()
 	normalMatrixLoc = glGetUniformLocation(myCustomShader.shaderProgram, "normalMatrix");
 	glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
 
-	projection = glm::perspective(glm::radians(45.0f), (float)retina_width / (float)retina_height, 0.1f, 30.0f);
+	projection = glm::perspective(glm::radians(45.0f), (float)retina_width / (float)retina_height, 0.1f, 1000.0f);
 	projectionLoc = glGetUniformLocation(myCustomShader.shaderProgram, "projection");
 	glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-	//set the light direction
+	//set the light direction (direction towards the light)
 	lightDir = glm::vec3(0.0f, 1.0f, 1.0f);
 	lightDirLoc = glGetUniformLocation(myCustomShader.shaderProgram, "lightDir");
 	glUniform3fv(lightDirLoc, 1, glm::value_ptr(glm::inverseTranspose(glm::mat3(view)) * lightDir));
@@ -242,34 +247,12 @@ void initUniforms()
 	lightColor = glm::vec3(1.0f, 1.0f, 1.0f); //white light
 	lightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "lightColor");
 	glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
-
-	baseColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "baseColor");
-	glUniform3fv(baseColorLoc, 1, glm::value_ptr(baseColor));
 }
 
-void initShaders() {
-	myCustomShader.loadShader("shaders/shaderStart.vert", "shaders/shaderStart.frag");
-	myCustomShader.useShaderProgram();
-}
-
-void initOpenGLState()
-{
-	glClearColor(0.8, 0.8, 0.8, 1.0);
-	glViewport(0, 0, retina_width, retina_height);
-
-	glEnable(GL_DEPTH_TEST); // enable depth-testing	
-	glDepthFunc(GL_LESS); // depth-testing interprets a smaller value as "closer"
-
-	glEnable(GL_CULL_FACE); // cull face
-	glCullFace(GL_BACK); // cull back face
-	glFrontFace(GL_CCW); // GL_CCW for counter clock-wise
-}
-
-void renderScene()
-{
+void renderScene() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	teapot.Draw(myCustomShader);
+	myModel.Draw(myCustomShader);
 }
 
 void cleanup() {
@@ -303,4 +286,3 @@ int main(int argc, const char* argv[]) {
 
 	return 0;
 }
-

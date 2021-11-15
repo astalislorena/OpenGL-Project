@@ -8,9 +8,6 @@
 
 #include "Shader.hpp"
 
-#include "GLEW/glew.h"
-#include "GLFW/glfw3.h"
-
 namespace gps {
     std::string Shader::readShaderFile(std::string fileName)
     {
